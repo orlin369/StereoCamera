@@ -1,0 +1,39 @@
+﻿import cv
+SHIFT=8
+
+if __name__ == '__main__':
+    import sys
+    _, fname = sys.argv
+    im  = cv.LoadImage(fname)
+
+    size = cv.GetSize(im)
+    width, height = size
+    left  = cv.CreateImage(size, im.depth, im.nChannels)
+    right = cv.CreateImage(size, im.depth, im.nChannels)
+    anaglyph = cv.CreateImage((width - SHIFT, height), im.depth, im.nChannels)
+
+    #
+    # This would be easier if we had COI support for cv.Set, but it doesn't
+    # work that way.
+    # OpenCV uses BGR order (even if input image is greyscale):
+    # http://www.cs.iit.edu/~agam/cs512/lect-notes/opencv-intro/opencv-intro.html
+    # red goes on the left, cyan on the right:
+    # http://en.wikipedia.org/wiki/Anaglyph_image
+    #
+    b = cv.CreateImage(size, im.depth, 1)
+    g = cv.CreateImage(size, im.depth, 1)
+    r = cv.CreateImage(size, im.depth, 1)
+    cv.Split(im, b, g, r, None)
+
+    zeros = cv.CreateImage(size, r.depth, 1)
+    cv.Merge(zeros, zeros, r, None, left)
+    cv.Merge(b, g, zeros, None, right)
+
+    #
+    # cvRect is ( x, y, width, height ) and it MUST be a tuple, not a list
+    # 
+    cv.SetImageROI(left,  ( SHIFT, 0, width - SHIFT, height ))
+    cv.SetImageROI(right, ( 0,     0, width - SHIFT, height ))
+    cv.Add(left, right, anaglyph, None)
+
+    cv.SaveImage('anaglyph.jpeg', anaglyph)
