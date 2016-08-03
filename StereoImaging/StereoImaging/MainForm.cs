@@ -442,239 +442,6 @@ namespace StereoImaging
             }
         }
 
-        /// <summary>
-        /// Is called to process dispariti map.
-        /// </summary>
-        private void Triangulate()
-        {
-
-            #region Saving Chessboard Corners in Buffer
-
-            if (this.currentMode == Mode.SavingFrames)
-            {
-                // Find the chessboard in bothe images.
-                this.cornersLeft = CameraCalibration.FindChessboardCorners(this.frameGrayLeft, this.patternSize, Emgu.CV.CvEnum.CALIB_CB_TYPE.ADAPTIVE_THRESH);
-                this.cornersRight = CameraCalibration.FindChessboardCorners(this.frameGrayRight, this.patternSize, Emgu.CV.CvEnum.CALIB_CB_TYPE.ADAPTIVE_THRESH);
-
-                // We use this loop so we can show a colour image rather than a gray:
-                // CameraCalibration.DrawChessboardCorners(Gray_Frame, patternSize, corners);
-                // We we only do this is the chessboard is present in both images.
-                if (this.cornersLeft != null && this.cornersRight != null)
-                {
-                    // Make mesurments more accurate by using FindCornerSubPixel.
-                    this.frameGrayLeft.FindCornerSubPix(new PointF[1][] { this.cornersLeft }, new Size(11, 11), new Size(-1, -1), new MCvTermCriteria(30, 0.01));
-                    this.frameGrayRight.FindCornerSubPix(new PointF[1][] { this.cornersRight }, new Size(11, 11), new Size(-1, -1), new MCvTermCriteria(30, 0.01));
-
-                    // If calibrate button has been pressed, aquire frames else, we will just display the points.
-                    if (this.beginCalibrationProcess)
-                    {
-                        // Save the calculated points into an array.
-                        this.cornersPointsLeft[this.savedBufferIndex] = this.cornersLeft;
-                        this.cornersPointsRight[this.savedBufferIndex] = this.cornersRight;
-                        this.savedBufferIndex++;
-
-                        //Show state of Buffer
-                        this.progresForm.SetValue(this.savedBufferIndex);
-
-                        //check the state of buffer
-                        if (this.savedBufferIndex == BUFFER_LENGTH)
-                        {
-                            this.beginCalibrationProcess = false;
-                            this.currentMode = Mode.CaluculatingStereoNtrinsics;
-
-                            if (this.progresForm.InvokeRequired)
-                            {
-                                this.progresForm.BeginInvoke((MethodInvoker)delegate()
-                                {
-                                    this.progresForm.Close();
-                                });
-                            }
-                            else
-                            {
-                                this.progresForm.Close();
-                            }
-
-                            MessageBox.Show("Buffer saveing complete.", "", MessageBoxButtons.OK, MessageBoxIcon.Information); //display that the mothod has been succesful
-                        }
-                    }
-
-                    //draw the results
-                    this.frameColorLeft.Draw(new CircleF(this.cornersLeft[0], 3), new Bgr(Color.Yellow), 1);
-                    this.frameColorRight.Draw(new CircleF(this.cornersRight[0], 3), new Bgr(Color.Yellow), 1);
-
-                    for (int i = 1; i < cornersLeft.Length; i++)
-                    {
-                        //left
-                        this.frameColorLeft.Draw(new LineSegment2DF(this.cornersLeft[i - 1], this.cornersLeft[i]), this.lineColours[i], 2);
-                        this.frameColorLeft.Draw(new CircleF(this.cornersLeft[i], 3), new Bgr(Color.Yellow), 1);
-                        //right
-                        this.frameColorRight.Draw(new LineSegment2DF(this.cornersRight[i - 1], this.cornersRight[i]), this.lineColours[i], 2);
-                        this.frameColorRight.Draw(new CircleF(this.cornersRight[i], 3), new Bgr(Color.Yellow), 1);
-                    }
-
-                    //calibrate the delay bassed on size of buffer
-                    //if buffer small you want a big delay if big small delay
-                    Thread.Sleep(50);//allow the user to move the board to a different position
-                }
-
-                this.cornersLeft = null;
-                this.cornersRight = null;
-            }
-
-            #endregion
-
-            #region Calculating Stereo Cameras Relationship
-
-            else if (this.currentMode == Mode.CaluculatingStereoNtrinsics)
-            {
-                try
-                {
-                    // Fill the MCvPoint3D32f with correct mesurments.
-                    for (int lengthIndex = 0; lengthIndex < BUFFER_LENGTH; lengthIndex++)
-                    {
-                        // Fill our objects list with the real world mesurments for the intrinsic calculations.
-                        List<MCvPoint3D32f> objectList = new List<MCvPoint3D32f>();
-                        for (int h = 0; h < this.patternSize.Height; h++)
-                        {
-                            for (int w = 0; w < this.patternSize.Width; w++)
-                            {
-                                objectList.Add(new MCvPoint3D32f(w * SQ_SIZE, h * SQ_SIZE, 0.0F));
-                            }
-                        }
-
-                        this.cornersObjectPoints[lengthIndex] = (MCvPoint3D32f[])objectList.ToArray().Clone();
-                    }
-
-                    // If Emgu.CV.CvEnum.CALIB_TYPE == CV_CALIB_USE_INTRINSIC_GUESS and/or CV_CALIB_FIX_ASPECT_RATIO are specified,
-                    // some or all of fx, fy, cx, cy must be initialized before calling the function
-                    // if you use FIX_ASPECT_RATIO and FIX_FOCAL_LEGNTH options,
-                    // these values needs to be set in the intrinsic parameters
-                    // before the CalibrateCamera function is called. Otherwise 0 values are used as default.
-                    //CameraCalibration.StereoCalibrate(this.cornersObjectPoints, this.cornersPointsLeft, this.cornersPointsRight,
-                    //    this.icpLeft, this.icpRight, this.frameColorLeft.Size,
-                    //    Emgu.CV.CvEnum.CALIB_TYPE.DEFAULT, new MCvTermCriteria(0.5),
-                    //    out this.ecp, out this.fundamental, out this.essential);
-
-                    MessageBox.Show("Intrinsic calculation complete.", "", MessageBoxButtons.OK, MessageBoxIcon.Information); //display that the mothod has been succesful
-
-                    CameraCalibration.StereoCalibrate(this.cornersObjectPoints, this.cornersPointsLeft, this.cornersPointsRight, this.icpLeft, this.icpRight, new Size(640, 480), Emgu.CV.CvEnum.CALIB_TYPE.DEFAULT, new MCvTermCriteria(0.5), out this.ecp, out this.fundamental, out this.essential);
-
-                    //Computes rectification transforms for each head of a calibrated stereo camera.
-                    CvInvoke.cvStereoRectify(this.icpLeft.IntrinsicMatrix, this.icpRight.IntrinsicMatrix,
-                                             this.icpLeft.DistortionCoeffs, this.icpRight.DistortionCoeffs,
-                                             this.frameColorLeft.Size,
-                                             this.ecp.RotationVector.RotationMatrix, this.ecp.TranslationVector,
-                                             this.R1Left, this.R2Right, this.P1, this.P2, this.Q,
-                                             Emgu.CV.CvEnum.STEREO_RECTIFY_TYPE.DEFAULT, 0,
-                                             this.frameColorLeft.Size, ref rectangleLeft, ref rectangleRight);
-
-                    //This will Show us the usable area from each camera
-                    MessageBox.Show("Left: " + this.rectangleLeft.ToString() + " \nRight: " + this.rectangleRight.ToString());
-                    this.currentMode = Mode.Calibrated;
-                }
-                catch (Exception exception)
-                {
-                    Console.WriteLine(exception.ToString());
-                }
-            }
-
-            #endregion
-
-            #region Caluclating disparity map after calibration
-
-            else if (this.currentMode == Mode.Calibrated)
-            {
-                Image<Gray, short> disparityMap;
-
-                this.Computer3DPointsFromStereoPair(this.frameGrayLeft, this.frameGrayRight, out disparityMap, out this.streoPearPoints);
-
-                //Display the disparity map
-                this.pbDisparityMap.Image = disparityMap.ToBitmap();
-                //Draw the accurate area
-                this.frameColorLeft.Draw(this.rectangleLeft, new Bgr(Color.LimeGreen), 1);
-                this.frameColorRight.Draw(this.rectangleRight, new Bgr(Color.LimeGreen), 1);
-            }
-
-            #endregion
-
-        }
-
-        /// <summary>
-        /// Given the left and right image, computer the disparity map and the 3D point cloud.
-        /// </summary>
-        /// <param name="leftImage">Left image</param>
-        /// <param name="rightImage">Right image</param>
-        /// <param name="disparityMap">Left disparity map</param>
-        /// <param name="points">The 3D point cloud within a [-0.5, 0.5] cube</param>
-        private void Computer3DPointsFromStereoPair(Image<Gray, Byte> leftImage, Image<Gray, Byte> rightImage, out Image<Gray, short> disparityMap, out MCvPoint3D32f[] points)
-        {
-            // Create disparity map.
-            disparityMap = new Image<Gray, short>(leftImage.Size);
-
-            // This is maximum disparity minus minimum disparity.
-            // Always greater than 0. In the current implementation this parameter must be divisible by 16.
-            int numDisparities = this.GetSliderValue(this.trbDisparities);
-
-            // The minimum possible disparity value. Normally it is 0,
-            // but sometimes rectification algorithms can shift images,
-            // so this parameter needs to be adjusted accordingly.
-            int minDispatities = this.GetSliderValue(this.trbMinDisparities);
-
-            // The matched block size. Must be an odd number >=1.
-            // Normally, it should be somewhere in 3..11 range.
-            int SAD = this.GetSliderValue(this.trbSADWindow);
-
-            // П1, P2 – Parameters that control disparity smoothness. The larger the values, the smoother the disparity. 
-            // P1 is the penalty on the disparity change by plus or minus 1 between neighbor pixels. 
-            // P2 is the penalty on the disparity change by more than 1 between neighbor pixels. 
-            // The algorithm requires P2 > P1 . 
-            // See stereo_match.cpp sample where some reasonably good P1 and P2 values are shown 
-            // (like 8 * number_of_image_channels * SADWindowSize * SADWindowSize and 32 * number_of_image_channels * SADWindowSize*SADWindowSize , respectively).
-            int P1 = 8 * 1 * SAD * SAD;
-            int P2 = 32 * 1 * SAD * SAD;
-
-            // Maximum allowed difference (in integer pixel units) in the left-right disparity check.
-            // Set it to non-positive value to disable the check.
-            int disp12MaxDiff = GetSliderValue(trbDisp12MaxDiff);
-
-            // Truncation value for the prefiltered image pixels. 
-            // The algorithm first computes x-derivative at each pixel and clips its value by [-preFilterCap, preFilterCap] interval. 
-            // The result values are passed to the Birchfield-Tomasi pixel cost function.
-            int PreFilterCap = GetSliderValue(trbPreFilterCap);
-
-            // The margin in percents by which the best (minimum) computed cost function value
-            // should “win” the second best value to consider the found match correct. 
-            // Normally, some value within 5-15 range is good enough*/
-            int UniquenessRatio = GetSliderValue(trbUniquenessRatio);
-
-            // Maximum disparity variation within each connected component. 
-            // If you do speckle filtering, set it to some positive value, multiple of 16. 
-            // Normally, 16 or 32 is good enough*/
-            int Speckle = GetSliderValue(trbSpeckleWindow);
-
-            // Maximum disparity variation within each connected component.
-            // If you do speckle filtering, set it to some positive value,
-            // multiple of 16. Normally, 16 or 32 is good enough.
-            int SpeckleRange = GetSliderValue(trbSpeckleRange);
-
-            // Set it to true to run full-scale 2-pass dynamic programming algorithm.
-            // It will consume O(W*H*numDisparities) bytes, which is large for 640x480 stereo and huge for HD-size pictures.
-            // By default this is usually false. Set globally for ease
-            // bool fullDP = true;
-
-            using (StereoSGBM stereoSolver = new StereoSGBM(minDispatities, numDisparities, SAD, P1, P2, disp12MaxDiff, PreFilterCap, UniquenessRatio, Speckle, SpeckleRange, this.stereoMode))
-            {
-                // Computes the disparity map using:
-                stereoSolver.FindStereoCorrespondence(leftImage, rightImage, disparityMap);
-                // GC: Graph Cut-based algorithm
-                // BM: Block Matching algorithm
-                // SGBM: modified H. Hirschmuller algorithm HH08.
-
-                // Reprojects disparity image to 3D space.
-                points = PointCollection.ReprojectImageTo3D(disparityMap, this.Q); 
-            }
-        }
-
         private void SearchForPorts()
         {
             this.portsToolStripMenuItem.DropDown.Items.Clear();
@@ -924,7 +691,7 @@ namespace StereoImaging
 
                 if (this.captureLeft != null)
                 {
-                    this.frameColorLeft = this.captureLeft.QueryFrame();
+                    this.frameColorLeft = this.captureLeft.QueryFrame().ToImage<Bgr, byte>();
 
                     if (this.frameColorLeft == null)
                     {
@@ -952,7 +719,7 @@ namespace StereoImaging
 
                 if (this.captureRight != null)
                 {
-                    this.frameColorRight = this.captureRight.QueryFrame();
+                    //this.frameColorRight = this.captureRight.QueryFrame().ToImage<Bgr, byte>();
                     
                     if (this.frameColorRight == null)
                     {
@@ -996,7 +763,7 @@ namespace StereoImaging
                 if (this.enableDisparity)
                 {
                     // TODO: Control this via new form. Delete enableDisparity.
-                    this.Triangulate();
+                    //this.Triangulate();
                 }
 
                 this.syncFlag = true;

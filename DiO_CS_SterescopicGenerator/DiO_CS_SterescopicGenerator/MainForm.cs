@@ -58,7 +58,7 @@ namespace DiO_CS_SterescopicGenerator
         /// <param name="imgToResize">Source image.</param>
         /// <param name="size"></param>
         /// <returns></returns>
-        private Bitmap resizeImage(Bitmap sourceImage, Size size)
+        private Bitmap ResizeImage(Bitmap sourceImage, Size size)
         {
             // 20140918 JI@DevGroup: За преоразмеряване потърси по-бързи алгоритми, които работят на по-ниско ниво (unsafe code)
             int sourceWidth = sourceImage.Width;
@@ -124,7 +124,7 @@ namespace DiO_CS_SterescopicGenerator
             this.inputImage = new Bitmap(this.imagePath);
 
             // Show the resized image.
-            this.pbMain.Image = this.resizeImage(this.inputImage, this.pbMain.Size);
+            this.pbMain.Image = this.ResizeImage(this.inputImage, this.pbMain.Size);
         }
 
         /// <summary>
@@ -198,7 +198,7 @@ namespace DiO_CS_SterescopicGenerator
             this.outputImage = Anaglyph.Make3DFrom2Images(leftImage, rightImage);
 
             // Show the image.
-            this.pbMain.Image = this.resizeImage(this.outputImage, this.pbMain.Size);
+            this.pbMain.Image = this.ResizeImage(this.outputImage, this.pbMain.Size);
         }
 
         /// <summary>
@@ -219,7 +219,7 @@ namespace DiO_CS_SterescopicGenerator
                 // Rend the image.
                 this.outputImage = Anaglyph.Make3DPopIn(new Bitmap((Image)this.inputImage), this.shiftValue);
                 // Show the nwe mage.
-                this.pbMain.Image = this.resizeImage(this.outputImage, this.pbMain.Size);
+                this.pbMain.Image = this.ResizeImage(this.outputImage, this.pbMain.Size);
             });
             workerThread.Start();
 
@@ -233,7 +233,7 @@ namespace DiO_CS_SterescopicGenerator
             Thread workerThread = new Thread(() =>
             {
                 // Generate the image name.
-                string tmpPath = this.imagePath.Replace(Path.GetExtension(this.imagePath), String.Format("_3D_{0}.PNG", this.shiftValue));
+                string tmpPath = this.imagePath.Replace(Path.GetExtension(this.imagePath), String.Format("_3D_{0}_{1}.PNG", this.shiftValue, DateTime.Now.ToString("yyyyMMddHHmmss")));
                 // Save the image.
                 this.outputImage.Save(tmpPath);
             });
