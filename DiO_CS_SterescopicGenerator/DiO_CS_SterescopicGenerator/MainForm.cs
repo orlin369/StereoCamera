@@ -312,6 +312,9 @@ namespace DiO_CS_SterescopicGenerator
             //}
         }
 
+        private void fileToolStripMenuItem_Click(object sender, EventArgs e)
+        {
 
+        }
     }
 }
